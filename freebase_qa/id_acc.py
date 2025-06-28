@@ -16,12 +16,12 @@ def construct_gen_prompt(question):
     return MULTITOPIC_ENTITIES_PROMPT.format(question)
 
 def main():
-    llm = "qwen"
+    llm = "gpt"
     Sbert = MODEL['minilm']
     dataset = "webqsp"
     top_k = 5  # 可调参数：取每个mid的Top-K关系相似度来平均
-    agent_count = 1
     keywords_num = 3
+    agent_count = 1
     correct_count = 0
 
     fb_client = FreebaseClient()
@@ -65,6 +65,7 @@ def main():
                 sim_scores = llm_handler.compute_similarity_batch(question, predicates)
 
                 # 取 Top-K 平均（代替所有平均）
+                top_k = min(top_k, len(sim_scores))
                 top_scores = sorted(sim_scores, reverse=True)[:top_k]
                 avg_top_score = sum(top_scores) / len(top_scores)
                 mid_scores.append((eid, k, avg_top_score))
@@ -77,7 +78,8 @@ def main():
             correct_count += 1
     
     acc = correct_count / len(datas)
-    print(f"top3 mid 准确率为： {acc*100:.2f}%")
+    print(f"核心实体的命中个数为：{correct_count}")
+    print(f"top{agent_count} mid 准确率为： {acc*100:.2f}%")
 
 
 if __name__ == '__main__':

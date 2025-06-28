@@ -11,7 +11,11 @@ from config.settings import (
     PROMPT_EVALUATE,
     COT_PROMPT,
     MULTITOPIC_ENTITIES_PROMPT,
-    EXTRACT_RELATION_PROMPT
+    EXTRACT_RELATION_PROMPT,
+    IS_RELEVANT,
+    EXTRACT_USEFUL_INFORMATION,
+    READ_AND_SUMMARIZE,
+    FILTER_TRIPLES
 )
 from core.freebase_client import FreebaseClient
 from core.llm_handler import LLMHandler
@@ -55,10 +59,11 @@ class ReasoningEngine:
         pre_relations = []
         pre_heads = [-1] * len(topic_entity)
         flag_printed = False
-        # if not topic_entity:
-        #     results = self.generate_without_explored_paths(question, args)
-        #     self.save_results(question, results, [], output_file)
-        #     flag_printed = True
+
+        if not topic_entity:
+            results = self.generate_without_explored_paths(question, args)
+            self.save_results(question, results, [], output_file)
+            return
 
         for depth in range(1, args.depth + 1):
             # 1. 搜索和剪枝关系
@@ -201,11 +206,11 @@ class ReasoningEngine:
             result = self.llm.run_llm(prompt, args.temperature_exploration)
             flag, relations = self.clean_relations(result, entity_id, head_relations)
         else:
-            docs = [
-                (rel, f"{entity_name} [SEP] {rel}" if pre_head else f"{rel} [SEP] {entity_name}")
-                for rel in total_relations
-            ]
-            relations, scores = self.retrieve_top_docs(question, docs, args.width)
+            # docs = [
+            #     (rel, f"{entity_name} [SEP] {rel}" if pre_head else f"{rel} [SEP] {entity_name}")
+            #     for rel in total_relations
+            # ]
+            relations, scores = self.retrieve_top_docs(question, total_relations, args.width)
             flag, relations = self._format_relations(entity_id, entity_name, relations, scores, head_relations)
         
         return relations if flag else []
@@ -223,13 +228,16 @@ class ReasoningEngine:
             scores = [1/len(entity_names) * entity_info["score"]] * len(entity_names)
             return scores, entity_names, entity_candidates_id
             
-        entity_names = self.text_utils.filter_unknown_entities(entity_names)
+        entity_names, entity_candidates_id = self.text_utils.filter_unknown_entities(entity_names, entity_candidates_id)
         
         if len(entity_names) == 1:
             return [entity_info["score"]], entity_names, entity_candidates_id
         if not entity_names:
             return [0.0], entity_names, entity_candidates_id
         
+        # 对齐名称和 ID
+        zipped = list(zip(entity_names, entity_candidates_id))
+
         if args.prune_tools == "llm":
             prompt = self._construct_entity_prompt(question, entity_info['relation'], entity_names)
             result = self.llm.run_llm(prompt, args.temperature_exploration)
@@ -245,7 +253,10 @@ class ReasoningEngine:
         if all(s == 0 for s in scores):
             scores = [1/len(scores)] * len(scores)
             
-        return [s * entity_info["score"] for s in scores], topn_entities, entity_candidates_id
+        name2id = {name: eid for name, eid in zipped}
+        topn_ids = [name2id[name] for name in topn_entities]
+
+        return [s for s in scores], topn_entities, topn_ids
 
     def update_history(self, entity_candidates, entity, scores, entity_candidates_id,
                       total_candidates, total_scores, total_relations, 
@@ -306,6 +317,42 @@ class ReasoningEngine:
                 for i in range(len(candidates))]]
         
         return True, chain, list(entities_id), list(relations), list(heads)
+
+    def triples_prune(self, question, eids, rels, cans, tids, heads, scores):
+        topic_names = [self.fb.get_entity_info(tid) for tid in tids]
+        infos = [{"subject": tids[i], 
+                   "relation": rels[i], 
+                   "object_id": eids[i], 
+                   "object": cans[i], 
+                   "head": heads[i], 
+                   "triples": (topic_names[i], rels[i], cans[i]) if heads[i]
+                                else (cans[i], rels[i], topic_names[i])
+                } for i in range(len(cans))]
+        origin_triples = [f"({subj}, {rel}, {obj})" for subj, rel, obj in [info["triples"] for info in infos]]
+
+        # 大模型筛选三元组
+        candidate_chains = "\n".join(origin_triples)
+        prompt = FILTER_TRIPLES.format(question, candidate_chains)
+        response = self.llm.run_llm(prompt)
+
+        # 使用正则表达式提取符合格式的三元组
+        pattern = r"\(([^,]+?),\s*([^,]+?),\s*([^)]+?)\)"
+        matches = re.findall(pattern, response)
+        filtered_triples = [tuple(m.strip() for m in match) for match in matches]
+
+        candidate_entities = {}
+        pre_relations = []
+        pre_heads = []
+        reasoning_chains = []
+        for info in infos:
+            triple = info["triples"]
+            if triple in filtered_triples:
+                candidate_entities[info["object_id"]] = info["object"]
+                pre_relations.append(info["relation"])
+                pre_heads.append(info["head"])
+                reasoning_chains.append(triple)
+
+        return reasoning_chains, candidate_entities, pre_relations, pre_heads
 
     def reasoning(self, question: str, cluster_chain: List, args: Dict) -> Tuple[bool, str]:
         """推理答案"""
@@ -499,14 +546,18 @@ class ReasoningEngine:
 
     def retrieve_top_docs(self, query: str, relation_pairs: List[str], width: int) -> Tuple[List[str], List[float]]:
         """检索相关文档"""
-        elements, docs = zip(*relation_pairs)
-        # docs = relation_pairs
+        try:
+            elements, docs = zip(*relation_pairs)
+        except:
+            elements = relation_pairs
+            docs = relation_pairs
         doc_embeddings = self.llm.sbert.encode(docs, normalize_embeddings=True, show_progress_bar=False)
         dim = doc_embeddings.shape[1]
         index = faiss.IndexFlatIP(dim)
         index.add(doc_embeddings)
 
         query_embedding = self.llm.sbert.encode([query], normalize_embeddings=True, show_progress_bar=False).astype(np.float32)
+        width = min(width, len(docs))
         scores, indices = index.search(query_embedding, width)
         
         top_docs = [elements[i] for i in indices[0]]
@@ -531,33 +582,43 @@ class ReasoningEngine:
     def is_relevant_to_question(self, question: str, triplets: List, args) -> Tuple[bool, str]:
         """调用 LLM 判断三元组是否与问题相关"""
         chain_text = '\n'.join(
-            ', '.join(str(item) for item in chain)
+            '('
+            + ', '.join(
+                f'"{item}"' if isinstance(item, str) else str(item)
+                for item in chain
+            )
+            + ')'
             for sublist in triplets
             for chain in (sublist if isinstance(sublist, list) else [])
         )
 
-        prompt = f"""
-    Please determine whether the following knowledge triples are relevant to the question: {question}
-
-    Knowledge Triplets:
-    {chain_text}
-
-    Instructions:
-    - If relevant, summarize the information contained in the following triples and present it as a coherent text.
-    - Only extract information from the triples provided, and do not add any extra content or commentary.
-    - If not relevant, please explain the reason.
-
-    Respond strictly in the following JSON format:
-    {{"is_relevant": true or false, "summary": ...}}
-    """
+        prompt = EXTRACT_USEFUL_INFORMATION.format(question, chain_text)
 
         response = self.llm.run_llm(prompt)
         response = self.response2json(response)
         data = json.loads(response)
         is_relevant = data.get("is_relevant", False)
-        summary = data.get("summary", "")
+        summary = data.get("information", "")
         return is_relevant, summary
-        
+
+    def read_and_summarize(self, question: str, triplets: List, args) -> Tuple[bool, str]:
+        """调用 LLM 判断三元组是否与问题相关"""
+        chain_text = '\n'.join(
+            '('
+            + ', '.join(
+                f'"{item}"' if isinstance(item, str) else str(item)
+                for item in chain
+            )
+            + ')'
+            for sublist in triplets
+            for chain in (sublist if isinstance(sublist, list) else [])
+        )
+
+        prompt = READ_AND_SUMMARIZE.format(question, chain_text)
+        response = self.llm.run_llm(prompt)
+
+        return response
+
     def is_valid_predicate(self, predicate: str) -> bool:
         return not any(predicate.startswith(prefix) for prefix in ["atom.feed", "freebase.", "dataworld", "common.document", "type.object.type", "type.object.permission","type.type."])
     

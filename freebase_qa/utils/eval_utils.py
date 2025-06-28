@@ -19,10 +19,6 @@ def prepare_dataset_for_eval(dataset_name, output_file):
         with open('../data/WebQSP_sampled_600.json',encoding='utf-8') as f:
             datas = json.load(f)
         question_string = 'RawQuestion'
-    elif dataset_name == 'error':
-        with open('../data/error_questions.json',encoding='utf-8') as f:
-            datas = json.load(f)
-        question_string = 'RawQuestion'
     elif dataset_name == 'grailqa':
         with open('../data/grailqa.json',encoding='utf-8') as f:
             datas = json.load(f)
@@ -73,7 +69,7 @@ def align(dataset_name, question_string, data, ground_truth_datas):
             alias.append(ans)
             answer_list.extend(alias)
 
-    elif dataset_name == 'webqsp' or dataset_name == 'webqsp_sampled' or  dataset_name == 'noisy_webqsp' or  dataset_name == 'error':
+    elif dataset_name == 'webqsp' or dataset_name == 'webqsp_sampled' or dataset_name == 'noisy_webqsp':
         answers = origin_data["Parses"]
         for answer in answers:
             for name in answer['Answers']:

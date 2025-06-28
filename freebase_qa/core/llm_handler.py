@@ -5,6 +5,7 @@ from utils.logging_utils import logger
 from sentence_transformers import SentenceTransformer, util
 from openai import OpenAI, AzureOpenAI
 import os
+import time
 
 class LLMHandler:
     def __init__(self, llm, sbert):
@@ -76,7 +77,9 @@ class LLMHandler:
         return content
 
     def run_llm(self, prompt, temperature=0.1, max_tokens=1024, openai_api_keys="EMPTY", engine="api"):
-        messages = [{"role": "user", "content": prompt}]
+        messages = [{"role":"system","content":"You are an AI assistant that helps people find information."}]
+        message_prompt = {"role":"user","content":prompt}
+        messages.append(message_prompt)
 
         if engine == "vllm":
             # 1. vllm部署LLM

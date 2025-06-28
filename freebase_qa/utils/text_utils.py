@@ -33,11 +33,17 @@ class TextUtils:
         return False, [e for e in entities if e != "[FINISH_ID]"]
     
     @staticmethod
-    def filter_unknown_entities(entities: List[str]) -> List[str]:
-        """过滤未知实体"""
-        if len(entities) == 1 and entities[0] == "UnName_Entity":
-            return entities
-        return [e for e in entities if e != "UnName_Entity"]
+    def filter_unknown_entities(entity_candidates: List[str], entity_candidates_id: List[int]) -> Tuple[List[str], List[int]]:
+        """同时删除名称和对应的 ID 中那些标记为 "UnName_Entity" 的条目。"""
+        filtered_names, filtered_ids = [], []
+        for name, eid in zip(entity_candidates, entity_candidates_id):
+            if name != "UnName_Entity":
+                filtered_names.append(name)
+                filtered_ids.append(eid)
+        # 特殊情况：如果仅有一个，并且就是 “UnName_Entity”，保留它
+        if not filtered_names and len(entity_candidates) == 1:
+            return entity_candidates, entity_candidates_id
+        return filtered_names, filtered_ids
     
     @staticmethod
     def extract_json(text):

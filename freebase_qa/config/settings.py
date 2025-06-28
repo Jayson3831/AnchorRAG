@@ -28,21 +28,22 @@ FINISH_ID = "[FINISH_ID]"
 FINISH_ENTITY = "[FINISH]"
 
 EMBEDDING = {
+    'index_path': '../Freebase/index/L6_dedup_embeddings.index',
     'embeddings_path': '../Freebase/index/L6_dedup_embeddings.npy',
     'names_path': '../Freebase/index/L6_dedup_names.json'
 }
 
 # 提示词配置
-GENERATE_TOPIC_ENTITY = """Identify and output the unique topic entity in the following question. 
+GENERATE_TOPIC_ENTITY = """Given a multi-step reasoning question, identify and output the unique Anchor entity present in the question to initiate the reasoning process. Refrain from including any reasoning steps or the final answer.
 Question: {}
-Topic Entity:
+Anchor Entity:
 """
 
 EXTRACT_RELATION_PROMPT = """Please retrieve %s relations (separated by semicolon) that contribute to the question and rate their contribution on a scale from 0 to 1 (the sum of the scores of %s relations is 1).
 Q: Name the president of the country whose main spoken language was Brahui in 1980?
 Topic Entity: Brahui Language
 Relations: language.human_language.main_country; language.human_language.language_family; language.human_language.iso_639_3_code; base.rosetta.languoid.parent; language.human_language.writing_system; base.rosetta.languoid.languoid_class; language.human_language.countries_spoken_in; kg.object_profile.prominent_type; base.rosetta.languoid.document; base.ontologies.ontology_instance.equivalent_instances; base.rosetta.languoid.local_name; language.human_language.region
-A: 1. {language.human_language.main_country (Score: 0.4))}: This relation is highly relevant as it directly relates to the country whose president is being asked for, and the main country where Brahui language is spoken in 1980.
+A: 1. {language.human_language.main_country (Score: 0.5))}: This relation is highly relevant as it directly relates to the country whose president is being asked for, and the main country where Brahui language is spoken in 1980.
 2. {language.human_language.countries_spoken_in (Score: 0.3)}: This relation is also relevant as it provides information on the countries where Brahui language is spoken, which could help narrow down the search for the president.
 3. {base.rosetta.languoid.parent (Score: 0.2)}: This relation is less relevant but still provides some context on the language family to which Brahui belongs, which could be useful in understanding the linguistic and cultural background of the country in question.
 
@@ -187,29 +188,30 @@ Follow the template above and only answer the questions asked, without generatin
 
 """
 
-MULTITOPIC_ENTITIES_PROMPT = """Identify the topic entities in the following question.
+MULTITOPIC_ENTITIES_PROMPT = """Extract all topic entities from the given multi-hop question. Topic entities are proper nouns, named entities, or specific concepts that are crucial for retrieving external knowledge. They may come from different sub-questions that contribute to the final answer. If there are multiple topic entities, separate them with commas.
+
 Examples:
 
-Q: what is the name of justin bieber brother?
-A: Justin Bieber
+Q: Who directed the movie in which Leonardo DiCaprio played Jordan Belfort?
+A: Leonardo DiCaprio, Jordan Belfort
 
-Q: what character did natalie portman play in star wars?
-A: Natalie Portman
+Q: Which team won the Champions League in the same year that Spain won the FIFA World Cup?
+A: Champions League, FIFA World Cup, Spain
 
-Q: what country is the grand bahama island in?
-A: Grand Bahama
+Q: Who was the US president when the Berlin Wall fell?
+A: US president, Berlin Wall
 
-Q: what time zone am i in cleveland ohio?
-A: Cleveland
+Q: Which book was written by the author of "Pride and Prejudice" and published after 1800?
+A: Pride and Prejudice
 
-Q: which countries border the us?
-A: United States of America
+Q: What is the capital of the country where Mount Everest is located?
+A: Mount Everest
 
-Q: who won the nobel prize in physics in the same year that albert einstein died?
+Q: Who won the Nobel Prize in Physics in the same year that Albert Einstein died?
 A: Nobel Prize in Physics, Albert Einstein
 
-Q: where are the nfl redskins from?
-A: Washington Redskins
+Q: In which city was the founder of Tesla Motors born?
+A: Tesla Motors
 
 Q: {}
 A: 
@@ -229,4 +231,80 @@ Summary Text:
 
 Answer strictly in the following format:
 A: {{Yes or No}}. Based on the given knowledge triplets and the summary text, [explanation].
+"""
+
+IS_RELEVANT = """
+Please determine whether the following knowledge triples are relevant to the question: {}
+
+Knowledge Triplets:
+{}
+
+Instructions:
+- If relevant, summarize the information contained in the following triples and present it as a coherent text.
+- Only extract information from the triples provided, and do not add any extra content or commentary.
+- If not relevant, please explain the reason.
+
+Respond strictly in the following JSON format:
+{{"is_relevant": true or false, "summary": ...}}
+"""
+
+EXTRACT_USEFUL_INFORMATION = """You are a knowledge extraction and text-generation assistant. Your job is to identify and transform relevant information from a set of structured knowledge triples into a coherent natural‑language answer for a given question. If no useful information is found, you must provide a brief explanation why.
+
+Input format:
+Question:
+{}
+
+Knowledge triples (one per line, in the format `(subject, predicate, object)`):
+{}
+
+Instructions:
+1. Scan the provided triples and select those most relevant to the question.  
+2. If at least one relevant triple exists, merge and rephrase their content into a single, fluent paragraph of English that directly answers the question.  
+3. If no triples are relevant, output exactly one sentence stating “No relevant information found,” followed by a brief reason (e.g. “triples do not cover the question topic” or “keywords not matched”).  
+4. Your output must contain **only** the generated answer or the single explanatory sentence—do **not** include the original triples or any additional commentary.
+
+Example 1 (useful information)  
+Question: When did Einstein win the Nobel Prize in Physics?  
+Triples: 
+(Einstein, birth_year, "1879")
+(Einstein, award_received, "Nobel Prize in Physics")
+(Einstein, award_year, "1921")
+(Einstein, death_date, "1955-04-18")
+Expected output:  
+{{"is_relevant": true, "information": "Einstein was awarded the Nobel Prize in Physics in 1921 for his explanation of the photoelectric effect."}}
+
+Example 2 (no useful information)  
+Question: Who invented the light bulb?  
+Triples:  
+(Edison, birth_year, "1847")
+(Edison, nationality, "American")
+Expected output:  
+{{"is_relevant": false, "information": "No relevant information found, because the provided triples do not include the inventor of the light bulb."}}
+"""
+
+READ_AND_SUMMARIZE = """You are a text-generation assistant. Your job is to take the provided structured knowledge triples and convert their content directly into a coherent natural-language paragraph. Do NOT add any information beyond what appears in the triples.
+
+Input format:
+Question:
+{}
+
+Knowledge triples (one per line, in the format `(subject, predicate, object)`):
+{}
+
+Instructions:
+1. Read all the provided triples.
+2. Merge and rephrase their combined content into a single fluent paragraph of English that directly conveys the information.
+3. Do NOT introduce any facts, explanations, or commentary that are not explicitly contained in the triples.
+4. If the list of triples is empty, output exactly: “No information provided.”
+
+Output:
+Your output must contain only the generated paragraph with no additional sections, labels, or commentary.
+"""
+
+FILTER_TRIPLES = """Given the question and a list of knowledge triples, identify and return only the triples that are directly relevant to answering the question.
+Do not change the format of the triples. Do not generate any explanations or extra text. Return only the filtered triples as-is.
+
+Question: {}
+Triples:
+{}
 """

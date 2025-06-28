@@ -46,9 +46,6 @@ class ReasoningAgent:
         pre_heads = state.get("pre_heads", {}).get(self.agent_id, [-1] * len(topic_entity))
         pre_relations = state.get("pre_relations", {}).get(self.agent_id, [])
 
-        if topic_entity.get("id") == FINISH_ID:
-            return {"reasoning_log": [f"Agent {self.agent_id} skipped, topic entity is empty"], "deactivated_agent": self.agent_id}
-
         current_relations = self.engine._search_and_prune_relations(
             state["question"], topic_entity, pre_relations, pre_heads, state["args"])
 
@@ -61,26 +58,28 @@ class ReasoningAgent:
         if not candidates:
             return {"reasoning_log": [f"Agent {self.agent_id}: no valid entities found"], "deactivated_agent": self.agent_id}
 
-        flag, chain_of_entities, entities_id, new_pre_relations, new_pre_heads = self.engine.entity_prune(
-            *candidates, state["args"])
+        chain_of_entities, candidate_entities, new_pre_relations, new_pre_heads = self.engine.triples_prune(state["question"], *candidates)
 
-        if not flag:
-            return {"reasoning_log": [f"Agent {self.agent_id}: pruning failed"], "deactivated_agent": self.agent_id}
+        # flag, chain_of_entities, entities_id, new_pre_relations, new_pre_heads = self.engine.entity_prune(
+        #     *candidates, state["args"])
 
-        candidate_entities = {
-            eid: self.fb.get_entity_info(eid) for eid in entities_id if eid != FINISH_ID
-        }
+        # if not flag:
+        #     return {"reasoning_log": [f"Agent {self.agent_id}: pruning failed"], "deactivated_agent": self.agent_id}
 
-        is_relevant, summary = self.engine.is_relevant_to_question(state["question"], chain_of_entities, state["args"])
-        if not is_relevant:
-            return {"reasoning_log": [f"Agent {self.agent_id}: triples are irrelevant. Stopped."], "deactivated_agent": self.agent_id}
+        # candidate_entities = {
+        #     eid: self.fb.get_entity_info(eid) for eid in entities_id if eid != FINISH_ID
+        # }
+
+        # is_relevant, summary = self.engine.is_relevant_to_question(state["question"], chain_of_entities, state["args"])
+        # if not is_relevant:
+        #     return {"reasoning_log": [f"Agent {self.agent_id}: triples are irrelevant. Stopped."], "deactivated_agent": self.agent_id}
 
         return {
             "candidate_entities": {self.agent_id: candidate_entities},
             "pre_heads": {self.agent_id: new_pre_heads},
             "pre_relations": {self.agent_id: new_pre_relations},
             "reasoning_chains": {self.agent_id: [chain_of_entities]},
-            "knowledge": {self.agent_id: [summary]},
+            "knowledge": {self.agent_id: []},
             "reasoning_log": [f"Agent {self.agent_id} completed."]
         }
 
@@ -222,15 +221,15 @@ class KnowledgeGraphReasoningSystem:
         #     " ".join(summaries) for summaries in state.get("knowledge", {}).values()
         # )
 
-        if not state.get("candidate_entities"):
-            return self._finalize_state(state, "no_active_agents", self.reason_engine.generate_without_explored_paths(state["question"], state["args"]), {})
-
         # 1. 使用三元组作为外部知识
         stop, response = self.reason_engine.reasoning(state["question"], all_chains, state["args"])
         # 2. 使用文本化的三元组作为外部知识
         # stop, response = self.reason_engine.reasoning_with_summary(state["question"], combined_summary, state["args"])
         if stop:
             return self._finalize_state(state, "answer_found", response, state.get("reasoning_chains", {}))
+
+        if not state.get("candidate_entities"):
+            return self._finalize_state(state, "no_active_agents", self.reason_engine.generate_without_explored_paths(state["question"], state["args"]), {})
 
         if state["current_depth"] == state["args"].depth:
             return self._finalize_state(state, "max_depth_reached", self.reason_engine.generate_without_explored_paths(state["question"], state["args"]), {})

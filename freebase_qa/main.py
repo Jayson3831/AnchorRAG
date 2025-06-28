@@ -14,20 +14,24 @@ from utils.file_utils import FileUtils
 from utils.logging_utils import setup_logging, logger
 import os, sys
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2,3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.chdir(sys.path[0])  #使用文件所在目录
 # print(f"Available GPUs: {torch.cuda.device_count()}")
 
 def parse_args():
     """解析命令行参数"""
-    parser = argparse.ArgumentParser(description="Freebase知识图谱问答系统")
+    parser = argparse.ArgumentParser(description="RAGE")
     
     # 数据集参数
     parser.add_argument("--dataset", type=str, default="webqsp",
                        help="选择数据集")
     
     # 模型参数
-    parser.add_argument("--LLM", type=str, default='vllm',
+    parser.add_argument("--LLM", type=str, default='qwen-plus',
                        help="LLM模型名称")
     parser.add_argument("--max_length", type=int, default=1024,
                        help="LLM输出最大长度")
@@ -44,15 +48,15 @@ def parse_args():
 
     # 搜索参数
     parser.add_argument("--width", type=int, default=3,
-                       help="搜索宽度")
+                       help="宽度")
     parser.add_argument("--depth", type=int, default=3,
                        help="搜索深度")
     parser.add_argument("--num_retain_entity", type=int,
                        default=10,
                        help="保留的实体数量")
-    parser.add_argument("--keyword_num", type=int, default=3,
+    parser.add_argument("--keyword_num", type=int, default=5,
                        help="关键词检索数量")
-    parser.add_argument("--relation_num", type=int, default=3,
+    parser.add_argument("--relation_num", type=int, default=5,
                        help="每个mid的Top-K关系相似度来求平均")
 
     # 剪枝选项
@@ -68,7 +72,7 @@ def parse_args():
                         choices=['io', 'cot', 'base', 'rage'], help="实验对比方法")
     
     # 智能体参数
-    parser.add_argument("--agent_count", type=int, default=1, help="实验对比方法")
+    parser.add_argument("--agent_count", type=int, default=3, help="实验对比方法")
     return parser.parse_args()
 
 def main():
@@ -140,7 +144,7 @@ def main():
 
                 # 运行流程
                 result = kg_system.workflow.invoke(initial_state)
-                print("Final Answer:", result["final_answer"])
+                # print("Final Answer:", result["final_answer"])
         
         logger.info("In the assessment results...")
         FileUtils.jsonl2json(jsonl_file, json_file)

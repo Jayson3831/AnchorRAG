@@ -30,7 +30,6 @@ class DataProcessor:
             'webqsp': 'RawQuestion',
             'cwq': 'question',
             'webqsp_sampled': 'RawQuestion',
-            'error': 'RawQuestion',
             'noisy_webqsp': 'NoisyQuestion'
             # 其他数据集映射...
         }.get(dataset_name, 'question')

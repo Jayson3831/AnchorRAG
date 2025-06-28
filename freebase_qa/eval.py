@@ -35,7 +35,7 @@ def eval_em(dataset, output_file, model_name, method, constraints_refuse=True):
     print("right: {}, error: {}".format(num_right, num_error))
 
     save_result2json(dataset, num_right, num_error, len(output_datas), model_stem, method)
-    check_wrong_result(method, dataset, model_stem, error_sample)
+    # check_wrong_result(method, dataset, model_stem, error_sample)
 
 
 if __name__ == '__main__':
