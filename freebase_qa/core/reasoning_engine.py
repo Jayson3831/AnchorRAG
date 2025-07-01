@@ -47,13 +47,14 @@ class ReasoningEngine:
         keywords = [e.strip() for e in response.split(",")]
         return keywords
 
-    def process_question(self, question: str, topic: List, args: Dict, 
+    def process_question(self, question: str, topics: List, args: Dict, 
                         output_file: str) -> bool:
         """处理单个问题"""
         topic_entity = {}
-        eids = self.fb.get_entity_id(topic)
-        for eid in eids:
-            topic_entity[eid] = topic
+        for topic in topics:
+            eids = self.fb.get_entity_id(topic)
+            for eid in eids:
+                topic_entity[eid] = topic
 
         cluster_chain = []
         pre_relations = []
@@ -462,7 +463,7 @@ class ReasoningEngine:
 
     def _construct_cot_prompt(self, question: str) -> str:
         """构建思维链提示"""
-        cot_prompt = COT_PROMPT + f"\n\nQ: {question}\n" + "A: "
+        cot_prompt = COT_PROMPT + f"\n\nQ: {question}\n"
         return cot_prompt
 
     def clean_relations(self, text: str, entity_id: str, head_relations: List[str]) -> Tuple[bool, List[Dict]]:

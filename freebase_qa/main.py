@@ -31,7 +31,7 @@ def parse_args():
                        help="选择数据集")
     
     # 模型参数
-    parser.add_argument("--LLM", type=str, default='Qwen/Qwen3-235B-A22B',
+    parser.add_argument("--LLM", type=str, default='qwen-plus',
                        help="LLM模型名称")
     parser.add_argument("--max_tokens", type=int, default=1024,
                        help="LLM输出最大长度")
@@ -40,9 +40,9 @@ def parse_args():
     parser.add_argument("--Sbert", type=str, default='sentence-transformers/all-MiniLM-L6-v2',
                        help="LLM模型名称")
     parser.add_argument("--openai_api_keys", type=str,
-                        default=os.getenv("MODELSCOPE_SDK_TOKEN"), help="your own openai api keys.")
+                        default=os.getenv("DASHSCOPE_API_KEY"), help="your own openai api keys.")
     parser.add_argument("--url", type=str,
-                        default="https://api-inference.modelscope.cn/v1/", help="base url.")
+                        default="https://dashscope.aliyuncs.com/compatible-mode/v1", help="base url.")
     parser.add_argument("--engine", type=str,
                         default="api", help="which platform you choose.")
 
@@ -119,7 +119,7 @@ def main():
                 reasoning_engine.save_results(question, results, [], jsonl_file)
                 
             elif args.method == "base":
-                gen_entity = reasoning_engine.generate_topic_entity(question, args)
+                gen_entity = reasoning_engine.generate_keywords(question, args)
                 reasoning_engine.process_question(question, gen_entity, args, jsonl_file)
 
             elif args.method == "rage":
