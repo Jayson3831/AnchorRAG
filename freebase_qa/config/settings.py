@@ -188,6 +188,13 @@ Follow the template above and only answer the questions asked, without generatin
 
 """
 
+SC_PROMPT = """According to the given multiple different reasoning paths, analyze and decide the most likely final answer.
+
+Question: {}
+Multiple reasoning paths:
+{}
+"""
+
 MULTITOPIC_ENTITIES_PROMPT = """Extract all topic entities from the given multi-hop question. Topic entities are proper nouns, named entities, or specific concepts that are crucial for retrieving external knowledge. They may come from different sub-questions that contribute to the final answer. If there are multiple topic entities, separate them with commas.
 
 Examples:

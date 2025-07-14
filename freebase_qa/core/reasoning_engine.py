@@ -44,7 +44,7 @@ class ReasoningEngine:
     def generate_keywords(self, question: str, args: Dict) -> List[str]:
         prompt = self._construct_gen_prompt(question)
         response = self.llm.run_llm(prompt, args)
-        keywords = [e.strip() for e in response.split(",")]
+        keywords = [e.strip() for e in response.split(",")] if isinstance(response, str) else []
         return keywords
 
     def process_question(self, question: str, topics: List, args: Dict, 
@@ -343,7 +343,7 @@ class ReasoningEngine:
 
         # 使用正则表达式提取符合格式的三元组
         pattern = r"\(([^,]+?),\s*([^,]+?),\s*([^)]+?)\)"
-        matches = re.findall(pattern, response)
+        matches = re.findall(pattern, response) if isinstance(response, str) else []
         filtered_triples = [tuple(m.strip() for m in match) for match in matches]
 
         candidate_entities = {}
@@ -471,7 +471,8 @@ class ReasoningEngine:
         pattern = r"{\s*(?P<relation>[^()]+)\s+\(Score:\s+(?P<score>[0-9.]+)\)}"
         relations = []
         
-        for match in re.finditer(pattern, text):
+        matches = re.finditer(pattern, text) if isinstance(text, str) else []
+        for match in matches:
             relation = match.group("relation").strip()
             if ';' in relation:
                 continue

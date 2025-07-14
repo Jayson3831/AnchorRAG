@@ -51,11 +51,11 @@ def eval_acc(prediction, answers):
 
 if __name__ == '__main__':
     dataset = 'webqsp'
-    model = 'qwen-plus'
-    method = 'rage'
+    model = 'gpt-4o-mini'
+    method = 'PoG'
     json_file = f"../outputs/{method}_{dataset}_{model}.json"
-    # jsonl_file = f"../outputs/{method}_{dataset}_{model}.jsonl"
+    jsonl_file = f"../outputs/{method}_{dataset}_{model}.jsonl"
     
-    # FileUtils.jsonl2json(jsonl_file, json_file)
+    FileUtils.jsonl2json(jsonl_file, json_file)
     eval_em(dataset, json_file, model, method)
     

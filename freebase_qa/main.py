@@ -1,7 +1,7 @@
 import argparse
 from tqdm import tqdm
 from config.settings import (
-    OUTPUT_PATH, JSON_PATH, IO_PROMPT, COT_PROMPT
+    OUTPUT_PATH, JSON_PATH, IO_PROMPT, COT_PROMPT, SC_PROMPT
 )
 from core.freebase_client import FreebaseClient
 from core.llm_handler import LLMHandler
@@ -69,7 +69,7 @@ def parse_args():
     
     # 对比方法
     parser.add_argument("--method", type=str, default="rage",
-                        choices=['io', 'cot', 'base', 'rage'], help="实验对比方法")
+                        choices=['io', 'cot', 'sc', 'rage'], help="实验对比方法")
     
     # 智能体参数
     parser.add_argument("--agent_count", type=int, default=3, help="实验对比方法")
@@ -108,23 +108,29 @@ def main():
 
             if args.method == "io":
                 prompt = IO_PROMPT + "\n\nQ: " + question + "\nA: "
-                try:
-                    results = reasoning_engine.llm.run_llm(prompt, args)
-                except:
-                    results = ""
+                results = reasoning_engine.llm.run_llm(prompt, args)
                 reasoning_engine.save_results(question, results, [], jsonl_file)
 
             elif args.method == "cot":
                 prompt = COT_PROMPT + "\n\nQ: " + question + "\nA: "
-                try:
-                    results = reasoning_engine.llm.run_llm(prompt, args)
-                except:
-                    results = ""
+                results = reasoning_engine.llm.run_llm(prompt, args)
                 reasoning_engine.save_results(question, results, [], jsonl_file)
                 
-            elif args.method == "base":
-                gen_entity = reasoning_engine.generate_keywords(question, args)
-                reasoning_engine.process_question(question, gen_entity, args, jsonl_file)
+            elif args.method == "sc":
+                cot_prompt = COT_PROMPT + "\n\nQ: " + question + "\nA: "
+                inference_num = 5
+                results = []
+                for i in range(inference_num):
+                    try:
+                        response = reasoning_engine.llm.run_llm(cot_prompt, args)
+                        results.append(response)
+                    except Exception as e:
+                        logger.error(f"Error during generation {i + 1}: {e}")
+                        results.append("Error")
+                reasoning_paths = "\n".join(f"{i+1}. {ans}" for i, ans in enumerate(results))
+                sc_prompt = SC_PROMPT.format(question, reasoning_paths)
+                sc_result = reasoning_engine.llm.run_llm(sc_prompt, args)
+                reasoning_engine.save_results(question, sc_result, [], jsonl_file)
 
             elif args.method == "rage":
                 initial_state = {

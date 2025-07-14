@@ -6,6 +6,8 @@ class TextUtils:
     @staticmethod
     def extract_answer(text: str) -> str:
         """从文本中提取答案"""
+        if not isinstance(text, str):
+            return ""
         start = text.find("{")
         end = text.find("}")
         return text[start+1:end].strip() if start != -1 and end != -1 else ""

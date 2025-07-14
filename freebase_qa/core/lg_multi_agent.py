@@ -178,7 +178,7 @@ class KnowledgeGraphReasoningSystem:
 
         for agent_id, future in futures:
             try:
-                update = future.result(timeout=500)
+                update = future.result(timeout=50000)
                 if update:
                     updates.append(update)
             except Exception as e:

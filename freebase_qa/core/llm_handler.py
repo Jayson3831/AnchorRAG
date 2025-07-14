@@ -103,14 +103,18 @@ class LLMHandler:
                 base_url=args.url,
             )
 
-            completion = client.chat.completions.create(
-                model=self.llm,  # 按需更换为其它深度思考模型
-                messages=messages,
-                temperature=args.temperature,
-                max_tokens=args.max_tokens,
-                extra_body={"enable_thinking": False},                                   # API设置是否开启深度思考
-                stream=False,
-            )
+            try:
+                completion = client.chat.completions.create(
+                    model=self.llm,  # 按需更换为其它深度思考模型
+                    messages=messages,
+                    temperature=args.temperature,
+                    max_tokens=args.max_tokens,
+                    extra_body={"enable_thinking": False},                                   # API设置是否开启深度思考
+                    stream=False,
+                )
+            except Exception as e:
+                logger.error(f"An error {e} occurred in the response process!")
+                return "No response"
 
         elif args.engine == "azure_openai":
             # 3. Azure openai 部署 GPT4
@@ -120,15 +124,22 @@ class LLMHandler:
                 azure_endpoint="https://rage0612.openai.azure.com/",
             )
 
-            completion = client.chat.completions.create(
-                model=self.llm,  # 用 Azure 模型部署名替换
-                messages=messages,
-                temperature=args.temperature,
-                max_tokens=args.max_tokens,
-                stream=False
-            )
+            try:
+                completion = client.chat.completions.create(
+                    model=self.llm,  # 用 Azure 模型部署名替换
+                    messages=messages,
+                    temperature=args.temperature,
+                    max_tokens=args.max_tokens,
+                    stream=False
+                )
+            except Exception as e:
+                logger.error(f"An error {e} occurred in the response process!")
+                return "No response"
 
-        return completion.choices[0].message.content
+        result = completion.choices[0].message.content
+        if not result:
+            return "No response"
+        return result
 
     def _load_sbert(self, sbert) -> str:
         model = SentenceTransformer(sbert)
