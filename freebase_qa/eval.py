@@ -34,25 +34,10 @@ def eval_em(dataset, output_file, model_name, method, constraints_refuse=True):
 
     save_result2json(dataset, Hit, Accuracy, model_stem, method)
 
-def eval_hit(prediction, answers):
-    for answer in answers:
-        if exact_match(prediction, answer):
-            return 1
-    return 0
-
-def eval_acc(prediction, answers):
-    matched = 0
-    if len(answers) == 0:
-        return 0
-    for answer in answers:
-        if exact_match(prediction, answer):
-            matched += 1
-    return matched / len(answers)
-
 if __name__ == '__main__':
     dataset = 'webqsp'
-    model = 'gpt-4o-mini'
-    method = 'PoG'
+    model = 'qwen-plus'
+    method = 'ReKnoS'
     json_file = f"../outputs/{method}_{dataset}_{model}.json"
     jsonl_file = f"../outputs/{method}_{dataset}_{model}.jsonl"
     
