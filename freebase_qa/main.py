@@ -13,25 +13,26 @@ from eval import eval_em
 from utils.file_utils import FileUtils
 from utils.logging_utils import setup_logging, logger
 import os, sys
+import time
 
 def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="RAGE")
     
-    parser.add_argument("--dataset", type=str, default="webqsp", help="Select the dataset")
-    parser.add_argument("--LLM", type=str, default='qwen-plus', help="LLM model name")
+    parser.add_argument("--dataset", type=str, default="webqsp_500", help="Select the dataset")
+    parser.add_argument("--LLM", type=str, default='Qwen3-8B', help="LLM model name")
     parser.add_argument("--max_tokens", type=int, default=1024, help="Maximum output length for the LLM")
     parser.add_argument("--temperature", type=float, default=0.7, help="Temperature for the large language model")
     parser.add_argument("--Sbert", type=str, default='sentence-transformers/all-MiniLM-L6-v2', help="Sentence-BERT model name or path")
     parser.add_argument("--openai_api_keys", type=str, default="", help="Your own OpenAI API keys.")
     parser.add_argument("--url", type=str, default="", help="Base URL.")
-    parser.add_argument("--engine", type=str, default="", help="Which platform you choose.")
+    parser.add_argument("--engine", type=str, default="vllm", help="Which platform you choose.")
     parser.add_argument("--width", type=int, default=3, help="Search width")
     parser.add_argument("--depth", type=int, default=3, help="Search depth")
     parser.add_argument("--num_retain_entity", type=int, default=10, help="Number of entities to retain")
     parser.add_argument("--keyword_num", type=int, default=5, help="Number of keywords for retrieval")
     parser.add_argument("--relation_num", type=int, default=5, help="Top-K relations per MID for similarity calculation")
-    parser.add_argument("--prune_tools", type=str, default="llm", choices=["llm", "sentencebert"], help="Pruning tool")
+    parser.add_argument("--prune_tools", type=str, default="sbert", choices=["llm", "sbert"], help="Pruning tool")
     parser.add_argument("--no-remove_unnecessary_rel", action="store_false", dest="remove_unnecessary_rel", help="Do not remove unnecessary relations")
     parser.add_argument("--method", type=str, default="rage", choices=['io', 'cot', 'sc', 'rage'], help="Method for experimental comparison")
     parser.add_argument("--agent_count", type=int, default=3, help="Number of agents")
@@ -55,12 +56,14 @@ def main():
         datas, question_field = data_processor.load_dataset(args.dataset)
         logger.info(f"Loaded dataset: {args.dataset}, Samples: {len(datas)}")
         
-        jsonl_file = OUTPUT_PATH.format(method=args.method, dataset=args.dataset, suffix=args.LLM.split("/")[-1])
-        json_file = JSON_PATH.format(method=args.method, dataset=args.dataset, suffix=args.LLM.split("/")[-1])
+        jsonl_file = OUTPUT_PATH.format(method=args.method, dataset=args.dataset, llm=args.LLM.split("/")[-1], suffix=args.prune_tools)
+        json_file = JSON_PATH.format(method=args.method, dataset=args.dataset, llm=args.LLM.split("/")[-1], suffix=args.prune_tools)
 
         processed_questions = FileUtils.load_processed_questions(jsonl_file)
         
         logger.info("Retriving and generating...")
+        start_time = time.time()
+        llm_handler.reset_token_usage()
         for data in tqdm(datas, desc=f"{args.method}..."):
             question = data[question_field]
             
@@ -120,6 +123,23 @@ def main():
     except Exception as e:
         logger.error(f"Error in main execution: {e}", exc_info=True)
         raise
+
+    finally:
+        # 5. 结束计时并打印统计信息（无论成功或失败）
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        token_usage = llm_handler.get_token_usage()
+        
+        logger.info("\n" + "="*50)
+        logger.info("Execution Statistics:")
+        logger.info(f"  - Total Execution Time: {elapsed_time:.2f} seconds")
+        if token_usage['total_tokens'] > 0:
+            logger.info(f"  - Total LLM Tokens Used: {token_usage['total_tokens']}")
+            logger.info(f"    - Prompt Tokens: {token_usage['prompt_tokens']}")
+            logger.info(f"    - Completion Tokens: {token_usage['completion_tokens']}")
+        else:
+            logger.info("  - No LLM tokens were used in this run.")
+        logger.info("="*50 + "\n")
 
 if __name__ == '__main__':
     main()

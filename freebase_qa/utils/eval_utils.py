@@ -7,8 +7,24 @@ def prepare_dataset_for_eval(dataset_name, output_file):
         with open('../data/cwq.json',encoding='utf-8') as f:
             datas = json.load(f)
         question_string = 'question'
+    elif dataset_name == 'cwq_1000':
+        with open('../data/cwq/cwq_1000.json',encoding='utf-8') as f:
+            datas = json.load(f)
+        question_string = 'question'
+    elif dataset_name == 'cwq_dt_0.2':
+        with open('../data/cwq/cwq_with_dt_0.2.json',encoding='utf-8') as f:
+            datas = json.load(f)
+        question_string = 'question'
     elif dataset_name == 'webqsp':
         with open('../data/WebQSP.json',encoding='utf-8') as f:
+            datas = json.load(f)
+        question_string = 'RawQuestion'
+    elif dataset_name == 'webqsp_500':
+        with open('../data/webqsp/webqsp_500.json',encoding='utf-8') as f:
+            datas = json.load(f)
+        question_string = 'RawQuestion'
+    elif dataset_name == 'webqsp_dt_0.2':
+        with open('../data/webqsp/webqsp_dt_0.2.json',encoding='utf-8') as f:
             datas = json.load(f)
         question_string = 'RawQuestion'
     elif dataset_name == 'noisy_webqsp':
@@ -35,6 +51,10 @@ def prepare_dataset_for_eval(dataset_name, output_file):
         with open('../data/grailqa.json',encoding='utf-8') as f:
             datas = json.load(f)
         question_string = 'question'
+    elif dataset_name == 'grailqa_100':
+        with open('../data/grailqa/grailqa_100.json',encoding='utf-8') as f:
+            datas = json.load(f)
+        question_string = 'question'
     elif dataset_name == 'simpleqa':
         with open('../data/SimpleQA.json',encoding='utf-8') as f:
             datas = json.load(f)    
@@ -59,12 +79,12 @@ def prepare_dataset_for_eval(dataset_name, output_file):
         with open('../data/creak.json',encoding='utf-8') as f:
             datas = json.load(f)
         question_string = 'sentence'
-    elif dataset_name == 'hotpotqa':
-        with open('../data/hotpotqa.json',encoding='utf-8') as f:
+    elif dataset_name == 'ow_webqsp':
+        with open('../data/OW_webqsp.json',encoding='utf-8') as f:
             datas = json.load(f)
         question_string = 'question'
-    elif dataset_name == 'triviaqa':
-        with open('../data/triviaqa.json',encoding='utf-8') as f:
+    elif dataset_name == 'ow_grailqa':
+        with open('../data/OW_grailqa.json',encoding='utf-8') as f:
             datas = json.load(f)
         question_string = 'question'
     else:
@@ -78,11 +98,11 @@ def prepare_dataset_for_eval(dataset_name, output_file):
 def align(dataset_name, question_string, data, ground_truth_datas):
     answer_list= []
     origin_data = [j for j in ground_truth_datas if j[question_string] == data['question']][0]
-    if dataset_name == 'cwq' or dataset_name == 'noisy_cwq' or dataset_name == 'hotpotqa' or dataset_name == 'triviaqa':
+    if dataset_name == 'cwq' or dataset_name == 'noisy_cwq' or dataset_name == 'ow_grailqa' or dataset_name == 'ow_webqsp' or 'cwq' in dataset_name:
         answer = origin_data["answer"]
         answer_list.append(answer)
 
-    elif dataset_name == 'webqsp' or dataset_name == 'noisy_webqsp':
+    elif dataset_name == 'webqsp' or dataset_name == 'noisy_webqsp' or 'webqsp' in dataset_name:
         answers = origin_data["Parses"]
         for answer in answers:
             for name in answer['Answers']:
@@ -91,7 +111,7 @@ def align(dataset_name, question_string, data, ground_truth_datas):
                 else:
                     answer_list.append(name['EntityName'])
 
-    elif dataset_name == 'grailqa' or dataset_name == 'noisy_grailqa':
+    elif dataset_name == 'grailqa' or dataset_name == 'noisy_grailqa' or 'grailqa' in dataset_name:
         answers = origin_data["answer"]
         for answer in answers:
             if "entity_name" in answer:
@@ -149,7 +169,11 @@ def check_refuse(string):
 
 
 def exact_match(response, answer):
-    clean_result = response.strip().replace(" ","").lower()
+    if isinstance(response, list):
+        cleaned_list = [item.strip().lower() for item in response]
+        clean_result = ",".join(cleaned_list)
+    elif isinstance(response, str):
+        clean_result = response.strip().replace(" ","").lower()
     clean_answer = answer.strip().replace(" ","").lower()
     if clean_result == clean_answer or clean_result in clean_answer or clean_answer in clean_result:
         return True

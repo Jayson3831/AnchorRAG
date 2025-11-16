@@ -99,14 +99,14 @@ class KnowledgeGraphReasoningSystem:
     def _build_workflow(self):
         workflow = StateGraph(DiscussionState)
 
-        workflow.add_node("filter", self.filter)
+        workflow.add_node("predictor", self.predictor)
         for agent_id in self.agent_pool:
             workflow.add_node(f"agent_{agent_id}", self.run_agent_factory(agent_id))
 
         workflow.add_node("parallel_agents", self.parallel_agents_node)
         workflow.add_node("supervisor", self.supervisor)
-        workflow.set_entry_point("filter")
-        workflow.add_edge("filter", "parallel_agents")
+        workflow.set_entry_point("predictor")
+        workflow.add_edge("predictor", "parallel_agents")
 
         def route_supervisor(state: DiscussionState):
             if state["whether_stop"] or state["current_depth"] > state["args"].depth:
@@ -117,7 +117,7 @@ class KnowledgeGraphReasoningSystem:
         workflow.add_conditional_edges("supervisor", route_supervisor, {END: END, "parallel_agents": "parallel_agents"})
         return workflow.compile()
 
-    def filter(self, state: DiscussionState):
+    def predictor(self, state: DiscussionState):
         question = state["question"]
         mid_scores = []
 
@@ -158,7 +158,7 @@ class KnowledgeGraphReasoningSystem:
             "pre_relations": pre_relations,
             "current_depth": 1,
             "active_agents": list(self.agent_pool.keys()),
-            "reasoning_log": ["Filter agent selected top topic entities (using SBERT Top-K similarity)."]
+            "reasoning_log": ["predictor agent selected top topic entities (using SBERT Top-K similarity)."]
         }
 
 

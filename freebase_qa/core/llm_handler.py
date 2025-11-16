@@ -12,7 +12,24 @@ class LLMHandler:
         self.llm = llm
         # self.tokenizer, self.model = self._load_model()
         self.sbert = self._load_sbert(sbert)
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_tokens = 0
     
+    def get_token_usage(self):
+        """获取当前累计的Token使用情况"""
+        return {
+            "prompt_tokens": self.total_prompt_tokens,
+            "completion_tokens": self.total_completion_tokens,
+            "total_tokens": self.total_tokens,
+        }
+
+    def reset_token_usage(self):
+        """重置Token计数器"""
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_tokens = 0
+
     def _load_model(self) -> Tuple[AutoTokenizer, AutoModelForCausalLM]:
         """加载LLM模型"""
         try:
@@ -88,7 +105,7 @@ class LLMHandler:
                 base_url="http://localhost:8000/v1",
             )
             completion = client.chat.completions.create(
-                model="Qwen/Qwen3-8B",  # 按需更换为其它深度思考模型
+                model="Qwen3-8B",  # 按需更换为其它深度思考模型
                 messages=messages,
                 temperature=args.temperature,
                 max_tokens=args.max_tokens,
@@ -120,8 +137,8 @@ class LLMHandler:
             # 3. Azure openai 部署 GPT4
             client = AzureOpenAI(
                 api_key=args.openai_api_keys,
-                api_version="",  # API 版本
-                azure_endpoint=args.url,
+                api_version="2024-12-01-preview",  # API 版本
+                azure_endpoint=args.url,  # Azure 端点
             )
 
             try:
@@ -136,6 +153,11 @@ class LLMHandler:
                 logger.error(f"An error {e} occurred in the response process!")
                 return "No response"
 
+        if completion.usage:
+            self.total_prompt_tokens += completion.usage.prompt_tokens
+            self.total_completion_tokens += completion.usage.completion_tokens
+            self.total_tokens += completion.usage.total_tokens
+
         result = completion.choices[0].message.content
         if not result:
             return "No response"
@@ -147,8 +169,8 @@ class LLMHandler:
     
     def compute_similarity_batch(self, query: str, candidates: List[str]) -> List[float]:
         # 编码 query 和 candidates
-        query_embedding = self.sbert.encode(query, convert_to_tensor=True, device='cuda', show_progress_bar=False)
-        candidate_embeddings = self.sbert.encode(candidates, convert_to_tensor=True, device='cuda', show_progress_bar=False)
+        query_embedding = self.sbert.encode(query, convert_to_tensor=True, device='cuda', normalize_embeddings=True, show_progress_bar=False)
+        candidate_embeddings = self.sbert.encode(candidates, convert_to_tensor=True, device='cuda', normalize_embeddings=True, show_progress_bar=False)
 
         # 计算余弦相似度，返回的是 tensor (1, N)
         cosine_scores = util.cos_sim(query_embedding, candidate_embeddings)[0]

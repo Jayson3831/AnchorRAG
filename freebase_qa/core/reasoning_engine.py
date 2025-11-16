@@ -16,7 +16,9 @@ from config.settings import (
     EXTRACT_USEFUL_INFORMATION,
     READ_AND_SUMMARIZE,
     FILTER_TRIPLES,
-    NOISY_PROMPT
+    NOISY_PROMPT,
+    EVALUATE_AND_SYNTHESIZE,
+    ANSWER_FROM_KNOWLEDGE
 )
 from core.freebase_client import FreebaseClient
 from core.llm_handler import LLMHandler
@@ -182,7 +184,7 @@ class ReasoningEngine:
             if not entity_candidates_id:
                 continue
                 
-            if len(entity_candidates_id) >= 20:
+            if len(entity_candidates_id) >= 1000:
                 entity_candidates_id = random.sample(entity_candidates_id, args.num_retain_entity)
             
             scores, entity_candidates, entity_candidates_id = self.entity_score(question, entity, entity_candidates_id, args)
@@ -229,11 +231,18 @@ class ReasoningEngine:
             result = self.llm.run_llm(prompt, args)
             flag, relations = self.clean_relations(result, entity_id, head_relations)
         else:
+            # beam-search
             # docs = [
             #     (rel, f"{entity_name} [SEP] {rel}" if pre_head else f"{rel} [SEP] {entity_name}")
             #     for rel in total_relations
             # ]
-            relations, scores = self.retrieve_top_docs(question, total_relations, args.width)
+            beam_relations, beam_scores = self.retrieve_top_docs(question, total_relations, args.width)
+
+            # Sparse Retrieval
+            sparse_relations, sparse_scores = self.compute_bm25_similarity(question, total_relations, args.width)
+
+            relations = beam_relations + sparse_relations
+            scores = beam_scores + sparse_scores
             flag, relations = self._format_relations(entity_id, entity_name, relations, scores, head_relations)
         
         return relations if flag else []
@@ -271,7 +280,11 @@ class ReasoningEngine:
                 else f"{entity} [SEP] {entity_info['relation']} [SEP] {entity_info['name']}")
                 for entity in entity_names
             ]
-            topn_entities, scores = self.retrieve_top_docs(question, docs, args.width)
+            beam_entities, beam_scores = self.retrieve_top_docs(question, docs, args.width)
+            sparse_entities, sparse_scores = self.compute_bm25_similarity(question, entity_names, args.width)
+
+            topn_entities = beam_entities + sparse_entities
+            scores = beam_scores + sparse_scores
         
         if all(s == 0 for s in scores):
             scores = [1/len(scores)] * len(scores)
@@ -348,10 +361,10 @@ class ReasoningEngine:
                    "object_id": eids[i], 
                    "object": cans[i], 
                    "head": heads[i], 
-                   "triples": (topic_names[i], rels[i], cans[i]) if heads[i]
+                   "triple": (topic_names[i], rels[i], cans[i]) if heads[i]
                                 else (cans[i], rels[i], topic_names[i])
                 } for i in range(len(cans))]
-        origin_triples = [f"({subj}, {rel}, {obj})" for subj, rel, obj in [info["triples"] for info in infos]]
+        origin_triples = [f"({subj}, {rel}, {obj})" for subj, rel, obj in [info["triple"] for info in infos]]
 
         # 大模型筛选三元组
         origin_triples = list(set(origin_triples))
@@ -369,7 +382,7 @@ class ReasoningEngine:
         pre_heads = []
         reasoning_chains = set()
         for info in infos:
-            triple = info["triples"]
+            triple = info["triple"]
             if triple in filtered_triples:
                 candidate_entities[info["object_id"]] = info["object"]
                 pre_relations.append(info["relation"])
@@ -526,10 +539,12 @@ class ReasoningEngine:
         tokenized_query = query.split(" ")
         
         doc_scores = bm25.get_scores(tokenized_query)
-        relations = bm25.get_top_n(tokenized_query, corpus, n=width)
-        scores = sorted(doc_scores, reverse=True)[:width]
-        
-        return relations, scores
+        corpus_with_scores = list(zip(corpus, doc_scores))
+        sorted_corpus = sorted(corpus_with_scores, key=lambda item: item[1], reverse=True)
+        top_n = sorted_corpus[:width]
+
+        relations, scores = zip(*top_n)
+        return list(relations), list(scores)
 
     def question_retrieve_entity(self, question: str, args) -> List[str]:
         query_embedding = self.llm.sbert.encode([question], normalize_embeddings=True, show_progress_bar=False)
@@ -621,6 +636,50 @@ class ReasoningEngine:
         response = self.llm.run_llm(prompt, args)
         is_rel, info = self.extract_fields(response)
         return is_rel, info
+
+    def evaluate_and_synthesize_knowledge(self, question: str, memory: List[str], new_chains: List, args) -> Dict:
+        """
+        调用 LLM 对新知识进行事实核查、纠正，判断信息是否充足，并提取关键信息。
+        """
+        memory_text = "\n".join(f"- {m}" for m in memory) if memory else "none"
+        new_chains_text = "\n".join(f"- {chain}" for chain in new_chains) if new_chains else "none"
+
+        prompt = EVALUATE_AND_SYNTHESIZE.format(
+            question=question,
+            memory=memory_text,
+            new_chains=new_chains_text
+        )
+        
+        response_text = self.llm.run_llm(prompt, args)
+        
+        # 解析 LLM 返回的 JSON 字符串
+        try:
+            # 尝试直接解析
+            parsed_response = json.loads(response_text)
+        except json.JSONDecodeError:
+            # 如果失败，使用正则表达式提取 JSON 部分
+            match = re.search(r'```json\n({.*?})\n```', response_text, re.DOTALL)
+            if match:
+                try:
+                    parsed_response = json.loads(match.group(1))
+                except json.JSONDecodeError:
+                    # 如果仍然失败，返回一个表示失败的默认结构
+                    return {"is_sufficient": False, "new_knowledge": "Failed to parse LLM response."}
+            else:
+                return {"is_sufficient": False, "new_knowledge": "No valid JSON found in LLM response."}
+
+        return parsed_response
+
+    def answer_from_knowledge(self, question: str, memory: List[str], args) -> str:
+        """
+        当达到最大深度时，根据所有累积的记忆生成答案。
+        """
+        memory_text = "\n".join(f"- {m}" for m in memory) if memory else "无"
+        prompt = ANSWER_FROM_KNOWLEDGE.format(
+            question=question,
+            memory=memory_text
+        )
+        return self.llm.run_llm(prompt, args)
 
     def read_and_summarize(self, question: str, triplets: List, args) -> Tuple[bool, str]:
         """调用 LLM 判断三元组是否与问题相关"""

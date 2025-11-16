@@ -3,20 +3,25 @@ from pathlib import Path
 # 数据集路径
 DATASET_PATHS = {
     'cwq': Path('../data/cwq.json'),
+    'cwq_1000': Path('../data/cwq/cwq_1000.json'),
+    'cwq_dt_0.2': Path('../data/cwq/cwq_with_dt_0.2.json'),
     'webqsp': Path('../data/WebQSP.json'),
+    'webqsp_500': Path('../data/webqsp/webqsp_500.json'),
+    'webqsp_dt_0.2': Path('../data/webqsp/webqsp_dt_0.2.json'),
     'grailqa': Path('../data/grailqa.json'),
+    'grailqa_100': Path('../data/grailqa/grailqa_100.json'),
     'webq': Path('../data/WebQuestions.json'),
     'webqsp_sampled': Path('../data/WebQSP_sampled_600.json'),
-    'noisy_webqsp': Path('../data/noisy_WebQSP.json'),
-    'noisy_grailqa': Path('../data/noisy_grailqa.json'),
+    'ow_webqsp': Path('../data/OW_webqsp.json'),
+    'ow_grailqa': Path('../data/OW_grailqa.json'),
     'noisy_cwq': Path('../data/noisy_cwq.json'),
     'noisy_webq': Path('../data/noisy_WebQuestions.json'),
     'hotpotqa': Path('../data/hotpotqa.json'),
     'triviaqa': Path('../data/triviaqa.json'),
     # 其他数据集...
 }
-OUTPUT_PATH = '../outputs/{method}_{dataset}_{suffix}.jsonl'
-JSON_PATH = '../outputs/{method}_{dataset}_{suffix}.json'
+OUTPUT_PATH = '../outputs/{method}_{dataset}_{llm}_{suffix}.jsonl'
+JSON_PATH = '../outputs/{method}_{dataset}_{llm}_{suffix}.json'
 
 PARA_JSONL = '../outputs/para/{dataset}_neighbors{relation_num}_agents{agent_count}_depth{depth}_width{width}.jsonl'
 PARA_JSON = '../outputs/para/{dataset}_neighbors{relation_num}_agents{agent_count}_depth{depth}_width{width}.json'
@@ -312,7 +317,7 @@ Instructions:
 1. Scan the provided triples and select those most relevant to the question.  
 2. If at least one relevant triple exists, merge and rephrase their content into a single, fluent paragraph of English that directly answers the question.  
 3. If no triples are relevant, output exactly one sentence stating “No relevant information found,” followed by a brief reason (e.g. “triples do not cover the question topic” or “keywords not matched”).  
-4. Your output must contain **only** the generated answer or the single explanatory sentence—do **not** include the original triples or any additional commentary.
+4. Your output must contain only the generated answer or the single explanatory sentence—do not include the original triples or any additional commentary.
 
 Example 1 (useful information)  
 Question: When did Einstein win the Nobel Prize in Physics?  
@@ -359,3 +364,45 @@ Question: {}
 Triples:
 {}
 """
+
+EVALUATE_AND_SYNTHESIZE = """
+You are a professional knowledge auditor and question-answering expert. Your task is to evaluate whether the user's question can be answered based on existing memory and new reasoning chains.
+
+Existing Memory:
+{memory}
+
+New Reasoning Chains (may contain factual errors):
+{new_chains}
+
+User's Question: "{question}"
+
+Please follow these steps strictly and return the result in JSON format:
+1.  Fact-Checking and Correction: Review the "New Reasoning Chains", compare them with the "Existing Memory" and your own knowledge, and correct any factual errors.
+2.  Information Sufficiency Assessment: Determine if all the corrected and merged information is sufficient to answer the "User's Question" clearly and unambiguously.
+3.  Generate Result:
+    If the information is sufficient:
+       Set `is_sufficient` to `true`.
+       Provide the final answer in the `answer` field.
+       Leave the `new_knowledge` field as an empty string `""`.
+    If the information is insufficient:
+       Set `is_sufficient` to `false`.
+       Leave the `answer` field as an empty string `""`.
+       In the `new_knowledge` field, summarize in one or two concise sentences the new key information extracted from the "New Reasoning Chains" that has been verified, corrected, and is helpful for answering the question. If there is no new information, return an empty string.
+
+Output Format (must be strict JSON):
+```json
+{{
+  "is_sufficient": boolean,
+  "answer": "string",
+  "new_knowledge": "string"
+}}
+
+"""
+
+ANSWER_FROM_KNOWLEDGE = """ You are an intelligent question-answering assistant. You can no longer perform external searches. Please answer the user's question to the best of your ability, based only on the "Accumulated Memory" provided below and your own knowledge.
+
+Accumulated Memory: {memory}
+
+User's Question: "{question}"
+
+Please provide your final answer directly. """

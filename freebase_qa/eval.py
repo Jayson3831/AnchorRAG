@@ -35,12 +35,13 @@ def eval_em(dataset, output_file, model_name, method, constraints_refuse=True):
     save_result2json(dataset, Hit, Accuracy, model_stem, method)
 
 if __name__ == '__main__':
-    dataset = 'webqsp'
-    model = 'qwen-plus'
-    method = 'ReKnoS'
-    json_file = f"../outputs/{method}_{dataset}_{model}.json"
-    jsonl_file = f"../outputs/{method}_{dataset}_{model}.jsonl"
-    
+    dataset = 'webqsp_500'
+    model = 'Qwen3-8B'
+    method = 'ToG'
+    prune_tools = 'llm'  # 'llm' or 'sbert'
+    json_file = f"../outputs/{method}_{dataset}_{model}_{prune_tools}.json"
+    jsonl_file = f"../outputs/{method}_{dataset}_{model}_{prune_tools}.jsonl"
+
     FileUtils.jsonl2json(jsonl_file, json_file)
     eval_em(dataset, json_file, model, method)
     
