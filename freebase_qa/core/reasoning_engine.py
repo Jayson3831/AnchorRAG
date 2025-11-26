@@ -188,7 +188,7 @@ class ReasoningEngine:
             if not entity_candidates_id:
                 continue
                 
-            if len(entity_candidates_id) >= 1000:
+            if len(entity_candidates_id) >= 50:
                 entity_candidates_id = random.sample(entity_candidates_id, args.num_retain_entity)
             
             scores, entity_candidates, entity_candidates_id = self.entity_score(question, entity, entity_candidates_id, args)
