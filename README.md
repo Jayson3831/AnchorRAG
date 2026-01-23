@@ -40,5 +40,13 @@ We employed a consistent set of parameters for all experiments conducted on the 
 ## How to cite
 If you are interested or inspired by this work, you can cite us by:
 ```sh
-
+@misc{xu2025openworldretrievalaugmentedgenerationknowledge,
+      title={Towards Open-World Retrieval-Augmented Generation on Knowledge Graph: A Multi-Agent Collaboration Framework}, 
+      author={Jiasheng Xu and Mingda Li and Yongqiang Tang and Peijie Wang and Wensheng Zhang},
+      year={2025},
+      eprint={2509.01238},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2509.01238}, 
+}
 ```
